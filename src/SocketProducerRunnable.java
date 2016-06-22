@@ -30,10 +30,12 @@ public class SocketProducerRunnable implements Runnable{
         Random rnd = new Random();
 
         Properties props = new Properties();
-        props.put("metadata.broker.list", "localhost:9092");
+        props.put("metadata.broker.list", "localhost:9092,localhost:9093,localhost:9094");
         props.put("serializer.class", "kafka.serializer.StringEncoder");
 //            props.put("partitioner.class", "example.producer.SimplePartitioner");
         props.put("request.required.acks", "1");
+        props.put("retry.backoff.ms", "500");
+
         ProducerConfig config = new ProducerConfig(props);
 
         Producer<String, String> producer = new Producer<String, String>(config);
@@ -48,11 +50,15 @@ public class SocketProducerRunnable implements Runnable{
             long latestTime = time;
 
             String inputLine;
+            JSONParser parser = new JSONParser();
+            Map obj = null;
+            Map jsonData = null;
+
             while ((inputLine = input.readLine()) != null) {
 //                System.out.println(inputLine);
-                JSONParser parser = new JSONParser();
-                Map obj = null;
-                Map jsonData = null;
+//                JSONParser parser = new JSONParser();
+//                Map obj = null;
+//                Map jsonData = null;
 
                 try {
                     obj = (Map)parser.parse(inputLine, new ContainerFactory(){
@@ -77,6 +83,10 @@ public class SocketProducerRunnable implements Runnable{
 
 
                     KeyedMessage<String, String> data = new KeyedMessage<String, String>("sensor-message", inputLine);
+//                    System.out.println("message: |" + data.message() + "|");
+                    producer.send(data);
+
+                    data = new KeyedMessage<String, String>("user_" + userID, inputLine);
 //                    System.out.println("message: |" + data.message() + "|");
                     producer.send(data);
                 }

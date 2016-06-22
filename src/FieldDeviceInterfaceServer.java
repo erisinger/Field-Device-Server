@@ -34,22 +34,24 @@ public class FieldDeviceInterfaceServer {
             try {
                 clientSocket = serverSocket.accept();
                 System.out.println("ACCEPTED CLIENT");
+                input = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+                output = new BufferedOutputStream(clientSocket.getOutputStream());
 
                 //handshake with field device
-                input = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-//                output = new BufferedOutputStream(clientSocket.getOutputStream());
-//
-//                String[] handshake = input.readLine().split(",");
-//
-//                //capture user ID and acknowledge
-//                if ("ID".equals(handshake[0])){
-//                    userID = Integer.parseInt(handshake[1]);
-//                    output.write(("ACK," + userID + "\n").getBytes());
-//                    output.flush();
-//                }
-//                else {
-//                    System.out.println("handshake from field device failed");
-//                }
+                String inString = input.readLine();
+                String[] handshake = inString.split(",");
+
+                System.out.println(inString);
+
+                //capture user ID and acknowledge
+                if ("ID".equals(handshake[0])){
+                    userID = Integer.parseInt(handshake[1]);
+                    output.write(("ACK," + userID + "\n").getBytes());
+                    output.flush();
+                }
+                else {
+                    System.out.println("handshake from field device failed");
+                }
             } catch (IOException e) {
                 System.out.println("Exception caught when trying to listen on port "
                         + portNumber + " or listening for a connection");
@@ -57,10 +59,13 @@ public class FieldDeviceInterfaceServer {
             }
 
             //check for valid user ID
-//            if (userID == -1) {
-//                System.out.println("bad user ID: handshake with field device failed");
+            if (userID == -1) {
+                //TEST CODE -- REMOVE
+                userID = 0;
+
+                System.out.println("bad user ID: handshake with field device failed");
 //                return;
-//            }
+            }
 
             //all went well -- launch new server thread and return to accept() loop
             new Thread(new SocketProducerRunnable(clientSocket, userID)).start();

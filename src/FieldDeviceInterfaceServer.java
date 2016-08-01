@@ -64,7 +64,7 @@ public class FieldDeviceInterfaceServer {
                 userID = 0;
 
                 System.out.println("bad user ID: handshake with field device failed");
-//                return;
+                return;
             }
 
             //all went well -- launch new server thread and return to accept() loop

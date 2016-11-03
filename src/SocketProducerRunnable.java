@@ -19,11 +19,10 @@ import org.json.simple.parser.ParseException;
 public class SocketProducerRunnable implements Runnable{
     private Producer<String, String> producer;
     protected Socket clientSocket = null;
-    private int userID;
+    private String userID;
 
-    public SocketProducerRunnable(Socket clientSocket, int id) {
+    public SocketProducerRunnable(Socket clientSocket) {
         this.clientSocket = clientSocket;
-        this.userID = id;
     }
 
     public void run() {
@@ -32,7 +31,25 @@ public class SocketProducerRunnable implements Runnable{
             BufferedReader input = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
             OutputStream output = clientSocket.getOutputStream();
 
-            System.out.println("CONNECTED");
+            System.out.print("connecting...");
+
+            output.write("ID\n".getBytes());
+            String handshake = input.readLine();
+            if (handshake == null){
+                System.out.println("null handshake -- aborting");
+                return;
+            }
+
+            String[] split = handshake.split(",");
+
+            if (split.length != 2 || !"ID".equals(split[0])){
+                System.out.println("invalid handshake: " + handshake);
+                return;
+            }
+
+            userID = split[1];
+            System.out.println("connected with ID " + userID);
+            output.write(("ACK," + userID + "\n").getBytes());
 
             configureProducer();
             configureConsumer();
@@ -40,21 +57,37 @@ public class SocketProducerRunnable implements Runnable{
             //begin reading in sensor data, emitting to Kafka
             String inputLine;
             while ((inputLine = input.readLine()) != null) {
+
+                //failsafe against handshake leaking into Kafka logs -- REPLACE with more effective message validation
                 if (inputLine.split(",").length != 2) {
                     //emit to one or more Kafka topics
                     emitStringWithTopic(inputLine, "sensor-message");
                     emitStringWithTopic(inputLine, "user_" + userID);
+
+//                    System.out.println("emitted: " + inputLine);
                 }
             }
 
-            //clean up
+            //close kafka producer
             producer.close();
-            output.close();
-            input.close();
-            System.out.println("Request processed: " + System.currentTimeMillis());
+            System.out.print("producer closed...");
+
+            //clean up socket stuff
+            if (!clientSocket.isClosed()) {
+                output.close();
+                input.close();
+                System.out.print("input and output closed...");
+                clientSocket.close();
+            }
+            System.out.println("socket closed");
+
+
+            System.out.println("session terminated gracefully at " + System.currentTimeMillis());
 
         } catch (IOException e) {
             e.printStackTrace();
+        } finally {
+
         }
     }
 
@@ -65,7 +98,8 @@ public class SocketProducerRunnable implements Runnable{
 
     private void configureProducer(){
         Properties props = new Properties();
-        props.put("metadata.broker.list", "localhost:9092,localhost:9093,localhost:9094");
+//        props.put("metadata.broker.list", "localhost:9092,localhost:9093,localhost:9094");
+        props.put("metadata.broker.list", "none.cs.umass.edu:9092,none.cs.umass.edu:9093,none.cs.umass.edu:9094");
         props.put("serializer.class", "kafka.serializer.StringEncoder");
 //        props.put("partitioner.class", "example.producer.SimplePartitioner");
         props.put("request.required.acks", "1");
@@ -78,7 +112,8 @@ public class SocketProducerRunnable implements Runnable{
 
     private void configureConsumer(){
         Properties props = new Properties();
-        props.put("bootstrap.servers", "localhost:9092");
+//        props.put("bootstrap.servers", "localhost:9092");
+        props.put("bootstrap.servers", "none.cs.umass.edu:9092,none.cs.umass.edu:9093,none.cs.umass.edu:9094");
         props.put("group.id", "test" + System.currentTimeMillis());
         props.put("enable.auto.commit", "true");
         props.put("auto.commit.interval.ms", "1000");
@@ -88,17 +123,12 @@ public class SocketProducerRunnable implements Runnable{
 
         //launch runnable
         ArrayList<String> topicsList = new ArrayList<>();
-        topicsList.add("user_1");
+        topicsList.add("user_" + userID);
+        topicsList.add("flink-analytics");
 
         KafkaConsumerRunnable consumerRunnable = new KafkaConsumerRunnable(props, topicsList, clientSocket);
         Thread consumerThread = new Thread(consumerRunnable);
         consumerThread.start();
-
-//        try {
-//            consumerThread.join();
-//        } catch (InterruptedException e) {
-//            e.printStackTrace();
-//        }
     }
 
     private class KafkaConsumerRunnable implements Runnable{
@@ -142,20 +172,25 @@ public class SocketProducerRunnable implements Runnable{
                             e.printStackTrace();
                         }
 
-                        if ("SENSOR_STEP".equals(obj.get("sensor_type"))) {
+                        if (userID.equals(obj.get("user_id")) && "SENSOR_SERVER_MESSAGE".equals(obj.get("sensor_type"))) {
+
+                            output.write(record.value() + "\n");
+                            output.flush();
+//                            System.out.println("sent server message " + record.value());
+
 //                            Map data = (Map)obj.get("data");
 //                            String outString = (String)data.get("s");
 
                             //this line is for testing only...
-                            String outString = "step at " + System.currentTimeMillis();
-
-                            if (outString != null) {
-
-                                System.out.println(outString);
-
-                                output.write(outString + "\n");
-                                output.flush();
-                            }
+//                            String outString = "step at " + System.currentTimeMillis();
+//
+//                            if (outString != null) {
+//
+////                                System.out.println(outString);
+//
+//                                output.write(outString + "\n");
+//                                output.flush();
+//                            }
                         }
 
 //                    System.out.println(record.value());

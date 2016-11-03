@@ -21,10 +21,7 @@ public class FieldDeviceInterfaceServer {
     public static void main (String[] args) throws IOException {
         Socket clientSocket = null;
         int portNumber = 9999;
-        int userID = -1; //NEEDS TO BE SET unless handshake is implemented
         ServerSocket serverSocket = null;
-        BufferedReader input;
-        BufferedOutputStream output;
 
         boolean running = true;
 
@@ -33,42 +30,15 @@ public class FieldDeviceInterfaceServer {
         while (running) {
             try {
                 clientSocket = serverSocket.accept();
-                System.out.println("ACCEPTED CLIENT");
-                input = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-                output = new BufferedOutputStream(clientSocket.getOutputStream());
+                System.out.print("accepted client " + clientSocket.getInetAddress().getHostAddress() + "...");
 
-                //handshake with field device
-                String inString = input.readLine();
-                String[] handshake = inString.split(",");
-
-                System.out.println(inString);
-
-                //capture user ID and acknowledge
-                if ("ID".equals(handshake[0])){
-                    userID = Integer.parseInt(handshake[1]);
-                    output.write(("ACK," + userID + "\n").getBytes());
-                    output.flush();
-                }
-                else {
-                    System.out.println("handshake from field device failed");
-                }
             } catch (IOException e) {
                 System.out.println("Exception caught when trying to listen on port "
                         + portNumber + " or listening for a connection");
                 System.out.println(e.getMessage());
             }
 
-            //check for valid user ID
-            if (userID == -1) {
-                //TEST CODE -- REMOVE
-                userID = 0;
-
-                System.out.println("bad user ID: handshake with field device failed");
-                return;
-            }
-
-            //all went well -- launch new server thread and return to accept() loop
-            new Thread(new SocketProducerRunnable(clientSocket, userID)).start();
+            new Thread(new SocketProducerRunnable(clientSocket)).start();
         }
         try {
             serverSocket.close();
